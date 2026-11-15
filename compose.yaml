@@ -1,7 +1,9 @@
 
 services:
   backend:
-    image: mcr.microsoft.com/devcontainers/python:3-3.15-trixie
+    build:
+      context: .
+      dockerfile: .devcontainer/Dockerfile
     user: "0:0"
     working_dir: /workspace
     volumes:
