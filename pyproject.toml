@@ -1,0 +1,32 @@
+
+[project]
+name = "steam-doma-backend"
+version = "0.1.0"
+description = "Backend API for Steam Doma"
+requires-python = ">=3.15,<3.16"
+dependencies = [
+    "fastapi",
+    "strawberry-graphql[fastapi]",
+    "pymongo",
+    "uvicorn[standard]",
+]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "httpx",
+    "ruff",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/steam_doma"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
