@@ -1,0 +1,56 @@
+
+name: Backend CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+
+    services:
+      mongo:
+        image: mongodb/mongodb-community-server:9.0-ubi9-slim
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.adminCommand({ping:1})'"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+
+    env:
+      MONGO_URI: mongodb://127.0.0.1:27017
+      MONGO_DB_NAME: steam_doma_test
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          version: "0.13.8"
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install 3.15
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Check lint
+        run: uv run ruff check .
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      - name: Run tests
+        run: uv run pytest -v
