@@ -1,0 +1,32 @@
+
+services:
+  backend:
+    image: mcr.microsoft.com/devcontainers/python:3-3.15-trixie
+    working_dir: /workspace
+    volumes:
+      - .:/workspace:cached
+    command: sleep infinity
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DB_NAME: steam_doma
+    depends_on:
+      mongo:
+        condition: service_healthy
+
+  mongo:
+    image: mongodb/mongodb-community-server:9.0-ubi9-slim
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "db.adminCommand('ping').ok"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  mongo_data:
