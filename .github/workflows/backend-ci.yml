@@ -54,3 +54,13 @@ jobs:
 
       - name: Run tests
         run: uv run pytest -v
+
+      - name: Build production image
+        run: docker build -t steam-doma-backend:ci .
+
+      - name: Verify production image
+        run: |
+          docker run --rm \
+            --entrypoint python \
+            steam-doma-backend:ci \
+            -c "import steam_doma.main; print('Application imports OK')"
