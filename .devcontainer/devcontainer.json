@@ -4,7 +4,8 @@
   "dockerComposeFile": "../compose.yaml",
   "service": "backend",
   "workspaceFolder": "/workspace",
-  "remoteUser": "vscode",
+  "remoteUser": "root",
+  "updateRemoteUserUID": false,
   "shutdownAction": "stopCompose",
   "forwardPorts": [8000],
   "portsAttributes": {
