@@ -1,4 +1,3 @@
-
 from fastapi.testclient import TestClient
 
 from steam_doma.main import app
@@ -20,6 +19,4 @@ def test_graphql_ping():
         )
 
     assert response.status_code == 200
-    assert response.json() == {
-        "data": {"ping": "pong"}
-    }
+    assert response.json() == {"data": {"ping": "pong"}}
