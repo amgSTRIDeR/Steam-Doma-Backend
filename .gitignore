@@ -34,3 +34,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local Steam dataset
+data/*.json
