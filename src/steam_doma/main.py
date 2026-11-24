@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 import strawberry
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pymongo import AsyncMongoClient
 from strawberry.fastapi import GraphQLRouter
 
@@ -19,6 +20,15 @@ from steam_doma.modules.games.graphql_queries import (
     resolve_games,
 )
 from steam_doma.modules.games.graphql_types import GamePage
+
+DEFAULT_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
+
+
+def parse_cors_origins(value: str) -> list[str]:
+    return [origin.strip().rstrip("/") for origin in value.split(",") if origin.strip()]
+
+
+CORS_ORIGINS = parse_cors_origins(os.getenv("CORS_ORIGINS") or DEFAULT_CORS_ORIGINS)
 
 
 @strawberry.type
@@ -60,6 +70,15 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Steam Doma API",
     lifespan=lifespan,
+)
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
