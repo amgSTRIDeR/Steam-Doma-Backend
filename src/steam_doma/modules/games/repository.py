@@ -14,7 +14,9 @@ CATALOG_PROJECTION = {
     "price": 1,
     "genres": 1,
     "platforms": 1,
+    "release_date_utc": 1,
     "steam_data.header_image": 1,
+    "steam_data.recommendations.total": 1,
 }
 
 ALLOWED_PLATFORMS = {"windows", "mac", "linux"}
