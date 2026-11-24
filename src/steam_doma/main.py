@@ -7,7 +7,11 @@ from pymongo import AsyncMongoClient
 from strawberry.fastapi import GraphQLRouter
 
 from steam_doma.modules.games.graphql_context import get_graphql_context
-from steam_doma.modules.games.graphql_queries import resolve_games
+from steam_doma.modules.games.graphql_detail import GameDetail
+from steam_doma.modules.games.graphql_queries import (
+    resolve_game,
+    resolve_games,
+)
 from steam_doma.modules.games.graphql_types import GamePage
 
 
@@ -18,6 +22,7 @@ class Query:
         return "pong"
 
     games: GamePage = strawberry.field(resolver=resolve_games)
+    game: GameDetail | None = strawberry.field(resolver=resolve_game)
 
 
 schema = strawberry.Schema(query=Query)

@@ -4,6 +4,10 @@ import strawberry
 from graphql import GraphQLError
 from strawberry.types import Info
 
+from steam_doma.modules.games.graphql_detail import (
+    GameDetail,
+    game_to_detail,
+)
 from steam_doma.modules.games.graphql_types import (
     GamePage,
     game_to_card,
@@ -89,3 +93,17 @@ async def resolve_games(
         page=page,
         page_size=page_size,
     )
+
+
+async def resolve_game(
+    info: Info,
+    id: strawberry.ID,
+) -> GameDetail | None:
+    repository: GameRepository = info.context["games_repository"]
+
+    document = await repository.get_by_id(str(id))
+
+    if document is None:
+        return None
+
+    return game_to_detail(document)
