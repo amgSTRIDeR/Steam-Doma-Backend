@@ -6,7 +6,13 @@ from fastapi import FastAPI, Request
 from pymongo import AsyncMongoClient
 from strawberry.fastapi import GraphQLRouter
 
-from steam_doma.modules.games.graphql_context import get_graphql_context
+from steam_doma.modules.games.graphql_catalog_filters import (
+    CatalogFilterOptions,
+    resolve_catalog_filters,
+)
+from steam_doma.modules.games.graphql_context import (
+    get_graphql_context,
+)
 from steam_doma.modules.games.graphql_detail import GameDetail
 from steam_doma.modules.games.graphql_queries import (
     resolve_game,
@@ -22,7 +28,10 @@ class Query:
         return "pong"
 
     games: GamePage = strawberry.field(resolver=resolve_games)
+
     game: GameDetail | None = strawberry.field(resolver=resolve_game)
+
+    catalog_filters: CatalogFilterOptions = strawberry.field(resolver=resolve_catalog_filters)
 
 
 schema = strawberry.Schema(query=Query)

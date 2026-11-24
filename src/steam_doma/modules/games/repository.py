@@ -48,7 +48,6 @@ class SortDirection(StrEnum):
 
 
 def build_game_query(filters: GameFilters) -> dict[str, Any]:
-    """Build a MongoDB query from catalog filters."""
     conditions: list[dict[str, Any]] = []
 
     if filters.search:
@@ -74,7 +73,7 @@ def build_game_query(filters: GameFilters) -> dict[str, Any]:
         conditions.append({"categories.id": {"$in": list(filters.category_ids)}})
 
     if filters.platforms:
-        if any(p not in ALLOWED_PLATFORMS for p in filters.platforms):
+        if any(platform not in ALLOWED_PLATFORMS for platform in filters.platforms):
             raise ValueError("Unsupported platform")
 
         conditions.append(
@@ -181,7 +180,7 @@ def build_sort_stages(
     else:
         field = {
             GameSortBy.DISCOUNT: "$price.discount_percent",
-            GameSortBy.RECOMMENDATIONS: "$steam_data.recommendations.total",
+            GameSortBy.RECOMMENDATIONS: ("$steam_data.recommendations.total"),
         }[sort_by]
 
         sort_value = {
@@ -220,7 +219,10 @@ class GameRepository:
     def __init__(self, games: AsyncCollection) -> None:
         self._games = games
 
-    async def get_by_id(self, game_id: str) -> dict[str, Any] | None:
+    async def get_by_id(
+        self,
+        game_id: str,
+    ) -> dict[str, Any] | None:
         if not ObjectId.is_valid(game_id):
             return None
 
@@ -264,3 +266,54 @@ class GameRepository:
         query = build_game_query(filters or GameFilters())
 
         return await self._games.count_documents(query)
+
+    async def get_filter_options(
+        self,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        genre_pipeline = [
+            {"$unwind": "$genres"},
+            {
+                "$match": {
+                    "genres.id": {"$type": "string"},
+                    "genres.description": {
+                        "$type": "string",
+                        "$ne": "",
+                    },
+                }
+            },
+            {
+                "$group": {
+                    "_id": "$genres.id",
+                    "name": {"$first": "$genres.description"},
+                }
+            },
+            {"$sort": {"name": 1, "_id": 1}},
+        ]
+
+        category_pipeline = [
+            {"$unwind": "$categories"},
+            {
+                "$match": {
+                    "categories.id": {"$type": ["int", "long"]},
+                    "categories.description": {
+                        "$type": "string",
+                        "$ne": "",
+                    },
+                }
+            },
+            {
+                "$group": {
+                    "_id": "$categories.id",
+                    "name": {"$first": "$categories.description"},
+                }
+            },
+            {"$sort": {"name": 1, "_id": 1}},
+        ]
+
+        genre_cursor = await self._games.aggregate(genre_pipeline)
+        genres = await genre_cursor.to_list()
+
+        category_cursor = await self._games.aggregate(category_pipeline)
+        categories = await category_cursor.to_list()
+
+        return genres, categories
