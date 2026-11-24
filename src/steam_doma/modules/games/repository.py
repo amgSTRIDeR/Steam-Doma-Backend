@@ -1,9 +1,9 @@
 import re
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any
 
 from bson import ObjectId
-from pymongo import ASCENDING
 from pymongo.asynchronous.collection import AsyncCollection
 
 CATALOG_PROJECTION = {
@@ -30,6 +30,18 @@ class GameFilters:
     max_price_minor: int | None = None
     free_only: bool = False
     discounted_only: bool = False
+
+
+class GameSortBy(StrEnum):
+    NAME = "name"
+    PRICE = "price"
+    DISCOUNT = "discount"
+    RECOMMENDATIONS = "recommendations"
+
+
+class SortDirection(StrEnum):
+    ASC = "asc"
+    DESC = "desc"
 
 
 def build_game_query(filters: GameFilters) -> dict[str, Any]:
@@ -117,6 +129,75 @@ def build_game_query(filters: GameFilters) -> dict[str, Any]:
     return {"$and": conditions}
 
 
+def build_sort_stages(
+    sort_by: GameSortBy,
+    direction: SortDirection,
+) -> list[dict[str, Any]]:
+    if not isinstance(sort_by, GameSortBy):
+        raise ValueError("Unsupported sort field")
+
+    if not isinstance(direction, SortDirection):
+        raise ValueError("Unsupported sort direction")
+
+    order = 1 if direction == SortDirection.ASC else -1
+
+    if sort_by == GameSortBy.NAME:
+        return [
+            {"$sort": {"name": order, "_id": 1}},
+        ]
+
+    if sort_by == GameSortBy.PRICE:
+        sort_value = {
+            "$cond": [
+                {"$eq": ["$is_free", True]},
+                0,
+                {
+                    "$cond": [
+                        {"$isNumber": "$price.final"},
+                        "$price.final",
+                        None,
+                    ]
+                },
+            ]
+        }
+    else:
+        field = {
+            GameSortBy.DISCOUNT: "$price.discount_percent",
+            GameSortBy.RECOMMENDATIONS: "$steam_data.recommendations.total",
+        }[sort_by]
+
+        sort_value = {
+            "$cond": [
+                {"$isNumber": field},
+                field,
+                None,
+            ]
+        }
+
+    return [
+        {"$addFields": {"_sort_value": sort_value}},
+        {
+            "$addFields": {
+                "_sort_missing": {
+                    "$cond": [
+                        {"$eq": ["$_sort_value", None]},
+                        1,
+                        0,
+                    ]
+                }
+            }
+        },
+        {
+            "$sort": {
+                "_sort_missing": 1,
+                "_sort_value": order,
+                "name": 1,
+                "_id": 1,
+            }
+        },
+    ]
+
+
 class GameRepository:
     def __init__(self, games: AsyncCollection) -> None:
         self._games = games
@@ -133,6 +214,8 @@ class GameRepository:
         page_size: int = 20,
         *,
         filters: GameFilters | None = None,
+        sort_by: GameSortBy = GameSortBy.NAME,
+        sort_direction: SortDirection = SortDirection.ASC,
     ) -> list[dict[str, Any]]:
         if type(page) is not int or page < 1:
             raise ValueError("Page must be at least 1")
@@ -143,20 +226,15 @@ class GameRepository:
         query = build_game_query(filters or GameFilters())
         offset = (page - 1) * page_size
 
-        cursor = (
-            self._games.find(
-                query,
-                projection=CATALOG_PROJECTION,
-            )
-            .sort(
-                [
-                    ("name", ASCENDING),
-                    ("_id", ASCENDING),
-                ]
-            )
-            .skip(offset)
-            .limit(page_size)
-        )
+        pipeline = [
+            {"$match": query},
+            *build_sort_stages(sort_by, sort_direction),
+            {"$skip": offset},
+            {"$limit": page_size},
+            {"$project": CATALOG_PROJECTION},
+        ]
+
+        cursor = await self._games.aggregate(pipeline)
 
         return await cursor.to_list()
 
