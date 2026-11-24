@@ -37,6 +37,7 @@ class GameSortBy(StrEnum):
     PRICE = "price"
     DISCOUNT = "discount"
     RECOMMENDATIONS = "recommendations"
+    RELEASE_DATE = "release_date"
 
 
 class SortDirection(StrEnum):
@@ -160,6 +161,21 @@ def build_sort_stages(
                 },
             ]
         }
+
+    elif sort_by == GameSortBy.RELEASE_DATE:
+        sort_value = {
+            "$cond": [
+                {
+                    "$eq": [
+                        {"$type": "$release_date_utc"},
+                        "date",
+                    ]
+                },
+                "$release_date_utc",
+                None,
+            ]
+        }
+
     else:
         field = {
             GameSortBy.DISCOUNT: "$price.discount_percent",
