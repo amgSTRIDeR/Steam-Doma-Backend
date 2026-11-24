@@ -6,12 +6,18 @@ from fastapi import FastAPI, Request
 from pymongo import AsyncMongoClient
 from strawberry.fastapi import GraphQLRouter
 
+from steam_doma.modules.games.graphql_context import get_graphql_context
+from steam_doma.modules.games.graphql_queries import resolve_games
+from steam_doma.modules.games.graphql_types import GamePage
+
 
 @strawberry.type
 class Query:
     @strawberry.field
     async def ping(self) -> str:
         return "pong"
+
+    games: GamePage = strawberry.field(resolver=resolve_games)
 
 
 schema = strawberry.Schema(query=Query)
@@ -28,7 +34,10 @@ async def lifespan(app: FastAPI):
 
     try:
         await client.admin.command("ping")
+
         app.state.mongo = client
+        app.state.mongo_client = client
+
         yield
     finally:
         await client.close()
@@ -47,6 +56,9 @@ async def health(request: Request):
 
 
 app.include_router(
-    GraphQLRouter(schema),
+    GraphQLRouter(
+        schema,
+        context_getter=get_graphql_context,
+    ),
     prefix="/graphql",
 )
