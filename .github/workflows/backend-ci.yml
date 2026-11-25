@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   test:
     name: Lint and Test
@@ -108,3 +112,120 @@ jobs:
 
       - name: Push production image
         run: docker push "$IMAGE_NAME:$IMAGE_TAG"
+
+  deploy:
+    name: Deploy to Azure Container Apps
+    runs-on: ubuntu-latest
+    needs: publish
+    timeout-minutes: 15
+
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      APP_NAME: ${{ vars.AZURE_CONTAINER_APP_NAME }}
+      IMAGE_NAME: ${{ vars.ACR_LOGIN_SERVER }}/steam-doma-backend
+      IMAGE_TAG: ${{ github.sha }}
+
+    steps:
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Verify revision mode
+        run: |
+          MODE=$(az containerapp show \
+            --name "$APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query properties.configuration.activeRevisionsMode \
+            --output tsv)
+
+          if [[ "$MODE" != "Single" ]]; then
+            echo "Expected Single revision mode, got: $MODE"
+            exit 1
+          fi
+
+      - name: Deploy production image
+        id: deploy
+        run: |
+          REVISION=$(az containerapp update \
+            --name "$APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --image "$IMAGE_NAME:$IMAGE_TAG" \
+            --query properties.latestRevisionName \
+            --output tsv)
+
+          test -n "$REVISION"
+
+          echo "revision=$REVISION" >> "$GITHUB_OUTPUT"
+          echo "Deployed revision: $REVISION"
+
+      - name: Wait for revision readiness
+        env:
+          TARGET_REVISION: ${{ steps.deploy.outputs.revision }}
+        run: |
+          for attempt in $(seq 1 30); do
+            READY_REVISION=$(az containerapp show \
+              --name "$APP_NAME" \
+              --resource-group "$RESOURCE_GROUP" \
+              --query properties.latestReadyRevisionName \
+              --output tsv)
+
+            if [[ "$READY_REVISION" == "$TARGET_REVISION" ]]; then
+              echo "Revision is ready: $READY_REVISION"
+              exit 0
+            fi
+
+            echo "Waiting for revision readiness..."
+            sleep 10
+          done
+
+          echo "Revision did not become ready"
+          exit 1
+
+      - name: Get application URL
+        id: application
+        run: |
+          FQDN=$(az containerapp show \
+            --name "$APP_NAME" \
+            --resource-group "$RESOURCE_GROUP" \
+            --query properties.configuration.ingress.fqdn \
+            --output tsv)
+
+          test -n "$FQDN"
+
+          echo "url=https://$FQDN" >> "$GITHUB_OUTPUT"
+          echo "Application URL: https://$FQDN"
+
+      - name: Health smoke test
+        env:
+          APP_URL: ${{ steps.application.outputs.url }}
+        run: |
+          curl --fail --silent --show-error \
+            --retry 5 \
+            --retry-all-errors \
+            --retry-delay 5 \
+            --max-time 45 \
+            "$APP_URL/health" \
+            | jq -e '.status == "ok"'
+
+      - name: GraphQL smoke test
+        env:
+          APP_URL: ${{ steps.application.outputs.url }}
+        run: |
+          curl --fail --silent --show-error \
+            --retry 5 \
+            --retry-all-errors \
+            --retry-delay 5 \
+            --max-time 45 \
+            -X POST "$APP_URL/graphql" \
+            -H "Content-Type: application/json" \
+            -d '{"query":"{ ping }"}' \
+            | jq -e '.data.ping == "pong" and ((.errors // []) | length == 0)'
