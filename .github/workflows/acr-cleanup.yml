@@ -1,0 +1,47 @@
+name: ACR Image Cleanup
+
+on:
+  schedule:
+    - cron: "17 6 * * 0"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    name: Clean old backend images
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    if: github.ref == 'refs/heads/main'
+
+    permissions:
+      contents: read
+      id-token: write
+
+    env:
+      ACR_NAME: ${{ vars.ACR_NAME }}
+      ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+      RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+      APP_NAME: ${{ vars.AZURE_CONTAINER_APP_NAME }}
+      DELETE_ENABLED: ${{ vars.ACR_CLEANUP_ENABLED }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Login to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Clean unused Docker images
+        run: python3 scripts/cleanup_acr.py
