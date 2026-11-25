@@ -17,6 +17,7 @@ DELETE_ENABLED = os.getenv("DELETE_ENABLED") == "true"
 
 
 def az_json(*args):
+    """Execute an Azure CLI command and parse its JSON output."""
     result = subprocess.run(
         ["az", *args, "--only-show-errors", "--output", "json"],
         capture_output=True,
@@ -65,12 +66,14 @@ def image_references() -> set[str]:
 
 
 def updated_at(manifest: dict) -> datetime:
+    """Return the manifest update timestamp."""
     timestamp = manifest.get("lastUpdateTime") or manifest["timestamp"]
 
     return datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
 
 
 def main() -> None:
+    """Clean old and unused container images."""
     references = image_references()
 
     manifests = az_json(
@@ -85,28 +88,29 @@ def main() -> None:
 
     manifests.sort(key=updated_at, reverse=True)
 
-    # Avoid deleting dependencies of multi-platform images.
-    for manifest in manifests:
-        media_type = manifest.get("mediaType", "")
+    # Protect child manifests referenced by OCI image indexes.
+    dependent_digests = set()
 
-        if (
-            "manifest.list" in media_type
-            or "image.index" in media_type
-            or manifest.get("references")
-        ):
-            raise RuntimeError("Multi-platform images require separate cleanup rules")
+    for manifest in manifests:
+        for reference in manifest.get("references") or []:
+            dependent_digests.add(reference["digest"])
 
     prefix = f"{ACR_LOGIN_SERVER}/{REPOSITORY}"
 
     tagged = [manifest for manifest in manifests if manifest.get("tags")]
 
+    # Always preserve the most recent images.
     protected = {manifest["digest"] for manifest in tagged[:KEEP_IMAGES]}
 
     cutoff = datetime.now(UTC) - timedelta(days=RETENTION_DAYS)
 
     print(f"Repository: {REPOSITORY}")
     print(f"Deletion enabled: {DELETE_ENABLED}")
+    print(f"Minimum retained images: {KEEP_IMAGES}")
+    print(f"Retention period: {RETENTION_DAYS} days")
     print(f"Images found: {len(tagged)}")
+    print(f"Dependent manifests: {len(dependent_digests)}")
+    print(f"Revision image references: {len(references)}")
 
     deleted = 0
     candidates = 0
@@ -115,27 +119,32 @@ def main() -> None:
         digest = manifest["digest"]
         tags = manifest["tags"]
 
-        image_refs = {f"{prefix}:{tag}" for tag in tags}
-        image_refs.add(f"{prefix}@{digest}")
-        image_refs.update(f"{prefix}:{tag}@{digest}" for tag in tags)
+        if digest in dependent_digests:
+            print(f"KEEP: {tags} - dependent manifest")
+            continue
 
         if digest in protected:
-            print(f"KEEP: {tags} — recent image")
+            print(f"KEEP: {tags} - recent image")
             continue
 
         if updated_at(manifest) >= cutoff:
-            print(f"KEEP: {tags} — younger than 7 days")
+            print(f"KEEP: {tags} - younger than {RETENTION_DAYS} days")
             continue
 
+        # Only remove images tagged with a Git commit SHA.
         if not all(re.fullmatch(r"[0-9a-f]{40}", tag) for tag in tags):
-            print(f"KEEP: {tags} — custom tag")
+            print(f"KEEP: {tags} - custom tag")
             continue
+
+        image_refs = {f"{prefix}:{tag}" for tag in tags}
+        image_refs.add(f"{prefix}@{digest}")
+        image_refs.update(f"{prefix}:{tag}@{digest}" for tag in tags)
 
         # Refresh revision references before each deletion.
         references = image_references()
 
         if references.intersection(image_refs):
-            print(f"KEEP: {tags} — referenced by a revision")
+            print(f"KEEP: {tags} - referenced by a revision")
             continue
 
         candidates += 1
@@ -165,6 +174,7 @@ def main() -> None:
 
     print(f"Candidates: {candidates}")
     print(f"Deleted: {deleted}")
+    print("Cleanup completed successfully.")
 
 
 if __name__ == "__main__":
