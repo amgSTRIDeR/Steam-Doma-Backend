@@ -47,14 +47,29 @@ class Query:
 schema = strawberry.Schema(query=Query)
 
 
+def create_mongo_client() -> AsyncMongoClient:
+    database_provider = os.getenv("DATABASE_PROVIDER", "local").strip().lower()
+
+    if database_provider == "azure":
+        return AsyncMongoClient(
+            os.environ["AZURE_DOCUMENTDB_URI"],
+            username=os.environ["AZURE_DOCUMENTDB_USERNAME"],
+            password=os.environ["AZURE_DOCUMENTDB_PASSWORD"],
+            serverSelectionTimeoutMS=10000,
+        )
+
+    if database_provider == "local":
+        return AsyncMongoClient(
+            os.environ["MONGO_URI"],
+            serverSelectionTimeoutMS=5000,
+        )
+
+    raise ValueError(f"Unsupported database provider: {database_provider}")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    mongo_uri = os.environ["MONGO_URI"]
-
-    client = AsyncMongoClient(
-        mongo_uri,
-        serverSelectionTimeoutMS=5000,
-    )
+    client = create_mongo_client()
 
     try:
         await client.admin.command("ping")
