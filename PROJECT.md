@@ -2,147 +2,76 @@
 
 ## Purpose
 
-- **What it does:** Backend for Steam Дома, an educational team project developed as part of RS School. The application is a Steam-inspired digital game marketplace with a catalog of approximately 5,000 games imported from Steam data.
+- **What it does:** Backend API for Steam Doma, an educational RS School project. This backend is developed individually. The team-developed frontend is maintained in a separate repository.
 - **Main use cases:**
-  - Browse, search, filter, sort, and view games.
-  - Retrieve genres, categories, platforms, prices, discounts, and game details.
-  - Register, authenticate, and manage users.
-  - Manage shopping carts and their contents.
-  - Provide role-based authorization for users and administrators.
-  - Allow administrators to manage games and users.
-  - Record administrative actions in an audit log.
-  - Provide a GraphQL API for the React frontend.
-  - User registration with mandatory acceptance of the Terms of Service.
-  - Self-service account deletion and personal data removal.
-- **Out of scope:**
+  - Browse, search, filter, sort, and paginate the Steam-inspired game catalog.
+  - Retrieve game details and available catalog filters.
+  - Provide a GraphQL API for the separate frontend and a health endpoint for operations.
+- **Out of scope for this backend:**
+  - Frontend application code.
+  - User registration, authentication, shopping carts, and administration features not present in this repository.
   - Real payments and Steam purchases.
-  - User-submitted games and content moderation.
-  - A separate TEST/PROD mode within the application.
   - Direct database access from the frontend.
   - Unnecessary microservices or infrastructure complexity.
 
 ## Stack and entry points
 
-- **Language(s) and versions:**
-  - Python 3.15.
-  - MongoDB Community Server 9.0 for local development.
-- **Framework(s) / package manager(s):**
-  - FastAPI — HTTP application framework (planned).
-  - Strawberry GraphQL — GraphQL schema and resolvers (planned).
-  - PyMongo Async — asynchronous MongoDB driver (planned).
-  - pytest — automated testing (planned).
-  - Ruff — linting and formatting (planned).
-  - Python dependency management — not yet configured.
-  - Docker Compose and VS Code Dev Containers.
+- **Language and version:** Python `>=3.15,<3.16`.
+- **Frameworks and tools:** FastAPI, Strawberry GraphQL, PyMongo Async, MongoDB, uv, pytest, Ruff, Docker Compose, and GitHub Actions.
 - **Application entry points:**
-  - `src/steam_doma/main.py` — planned FastAPI application entry point.
-  - `/graphql` — planned primary API endpoint.
-  - `/health` — planned health-check endpoint.
-  - `scripts/import_games.py` — planned Steam dataset import script.
+  - `src/steam_doma/main.py` — FastAPI application, GraphQL schema, database lifecycle, CORS, and `/health`.
+  - `/graphql` — GraphQL endpoint.
+  - `scripts/seed_games.py` — explicit game catalog import.
+  - `scripts/setup_game_indexes.py` — game index setup.
+  - `scripts/check_azure_documentdb.py` — Azure DocumentDB connectivity check.
 
 ## Repository layout
 
-- **Application code:** Planned structure under `src/steam_doma/`:
-  - `config/` — configuration and environment settings.
-  - `db/` — MongoDB connection and database access.
-  - `graphql/` — GraphQL schema, queries, and mutations.
-  - `modules/games/` — game catalog and filtering.
-  - `modules/auth/` — authentication and authorization.
-  - `modules/users/` — user management.
-  - `modules/cart/` — shopping cart operations.
-  - `modules/admin/` — administrative operations and audit logging.
-- **Tests:** `tests/` — planned pytest tests, including unit and integration tests.
-- **Configuration / generated code:**
-  - `.devcontainer/devcontainer.json` — VS Code Dev Container configuration.
-  - `compose.yaml` — local Python development container and MongoDB.
-  - `pyproject.toml` — planned Python project and tool configuration.
-  - `.env.example` — planned environment variable documentation.
-  - MongoDB data stored in a persistent Docker volume.
+- `src/steam_doma/modules/games/` — game catalog GraphQL types, queries, filters, details, normalization, and repository.
+- `tests/` — API, catalog, repository, sorting, release-date, and seed tests.
+- `scripts/` — catalog seeding, index setup, release-date maintenance, and Azure database diagnostics.
+- `docs/graphql-catalog.md` — GraphQL catalog API reference.
+- `compose.yaml` — local backend development container and MongoDB service.
+- `.devcontainer/` — VS Code Dev Container configuration.
+- `Dockerfile` — production application image.
+- `.github/workflows/backend-ci.yml` — backend checks and Azure deployment workflow.
+- `pyproject.toml` and `uv.lock` — Python project configuration and locked dependencies.
 
 ## Architecture and constraints
 
-- **Module responsibilities and dependency direction:**
-  - Frontend communicates with the backend through GraphQL.
-  - GraphQL resolvers delegate business logic to application services.
-  - Services interact with MongoDB through dedicated database access code.
-  - Database access must not be implemented directly inside GraphQL resolvers.
-  - Use asynchronous database operations where appropriate.
-  - Keep modules focused on their respective business domains.
-  - Prefer a modular monolith over microservices.
-- **Data model:**
-  - MongoDB is the primary NoSQL database.
-  - Planned collections: `games`, `users`, `carts`, `audit_logs`.
-  - Orders may be introduced if checkout becomes part of the application.
-  - Game documents originate from an imported Steam JSON dataset.
-  - Preserve useful nested Steam data without unnecessary normalization.
-  - Use Steam `appid` as a stable game identifier.
-  - Some Steam fields may be missing, null, or have different structures.
-  - Missing prices must not automatically be interpreted as free games.
-  - Store the accepted Terms of Service version and acceptance timestamp
-  in the user document.
-  - User accounts and shopping carts must support complete account deletion.
-  - Personal data in audit logs must be anonymized or removed when required,
-    subject to applicable legal retention obligations.
-- **Interfaces or behaviors that must remain stable:**
-  - GraphQL is the preferred API for application functionality.
-  - The React frontend must never connect directly to MongoDB.
-  - Authentication and role checks must be enforced on the backend.
-  - Admin-only operations must reject unauthorized users.
-  - Shopping cart data must remain associated with the correct user.
-  - Audit logs must preserve information about administrative actions.
-  - Game identifiers must remain consistent during imports and updates.
-  - Secrets and database credentials must never be committed.
-  - Registration must be rejected unless the user accepts the Terms of Service.
-  - The Privacy Policy must be accessible during registration.
-  - Users must be able to delete their own accounts without administrator involvement.
-  - Account deletion must require authentication and identity re-verification.
-  - Users must never be able to delete another user's account.
-  - Account deletion must revoke active sessions and invalidate refresh tokens.
-  - Deleting an account must remove associated personal data unless retention
-  is legally required.
-- **Deployment constraints:**
-  - Local development uses Docker Compose and MongoDB.
-  - Production deployment is planned on Microsoft Azure.
-  - Azure Container Apps is the planned backend hosting platform.
-  - Azure DocumentDB is the preferred managed NoSQL database candidate, subject to MongoDB driver and feature compatibility verification.
-  - Keep infrastructure configuration separate from application business logic.
-- **Paths not to edit manually:**
-  - `.git/`
-  - `.venv/`
-  - `__pycache__/`
-  - `.pytest_cache/`
-  - `.ruff_cache/`
-  - Generated files and dependency lockfiles, except through their corresponding tools.
+- The frontend is a separate, team-maintained repository. It calls this backend over HTTPS and GraphQL; it must not connect directly to MongoDB.
+- GraphQL resolvers use the game repository for database access.
+- The application connects to MongoDB-compatible storage at startup and closes the client at shutdown.
+- The local database is MongoDB Community Server. The hosted backend is configured to use Azure DocumentDB.
+- The database contains the game catalog and seeding history. Game data originates from the Steam JSON dataset; `steam_appid` is the stable Steam identifier.
+- Catalog/API behavior:
+  - `/graphql` exposes `ping`, `games`, `game`, and `catalogFilters`.
+  - `/health` checks database connectivity.
+  - The catalog API currently has no user authentication or authorization; treat it as public.
+  - Missing prices must not be interpreted as free games.
+  - Keep credentials out of source control.
+- CORS origins are configured through `CORS_ORIGINS`; local defaults permit the Vite origins on port 5173.
+
+## Deployment
+
+- The backend is deployed to Azure Container Apps and uses Azure DocumentDB.
+- `.github/workflows/backend-ci.yml` runs linting, formatting checks, tests, and image verification for pull requests to `main`. Pushes to `main` publish the image to Azure Container Registry, deploy it to Azure Container Apps, and run health and GraphQL smoke tests.
+- The frontend is maintained in a separate repository by the project team and is planned for an independent Azure deployment. Its public origin must be allowed by the backend CORS configuration.
+- Keep cloud infrastructure configuration separate from application business logic. Do not initialize or seed the production database as part of application startup or deployment.
 
 ## Local verification
 
-- **Install / setup:**
-  - Install Docker Engine, Docker Compose, VS Code, and the Dev Containers extension.
-  - Open the repository in VS Code.
-  - Run `Dev Containers: Reopen in Container`.
-  - Check configuration using `docker compose config --quiet`.
-  - Start services using `docker compose up -d`.
-  - Verify Python using `python --version` inside the backend container.
-  - Verify MongoDB connectivity using `docker compose exec mongo mongosh --eval "db.adminCommand({ ping: 1 })"` from the host.
-- **Focused tests:** Planned: `python -m pytest tests/<test_file>.py`.
-- **Full test suite:** Planned: `python -m pytest`.
-- **Lint / type checks:**
-  - Planned: `ruff check .`.
-  - Planned: `ruff format --check .`.
-  - Static type checking is not yet configured.
-- **Build:**
-  - The initial development environment uses a prebuilt Python Dev Container image.
-  - Application packaging and the production Docker image are not yet implemented.
-  - Azure deployment and CI/CD workflows are not yet configured.
+- Install Docker with Compose, VS Code, and the Dev Containers extension, or install uv and Python 3.15 locally.
+- In VS Code, use **Dev Containers: Reopen in Container**. Alternatively, run `uv sync --locked`.
+- Configure `.env` with the local MongoDB connection and database name. `compose.yaml` provides the `mongo` service at `mongodb://mongo:27017` inside the Compose network.
+- Check Compose configuration with `docker compose config --quiet`.
+- Run tests with `uv run --env-file .env pytest -v`.
+- Run lint and format checks with `uv run ruff check .` and `uv run ruff format --check .`.
+- Build the production image with `docker build -t steam-doma-backend:local .`.
 
 ## Known limitations
 
-- The repository is in its initial setup stage.
-- The application structure and Python dependencies are not yet fully implemented.
-- GraphQL schema and authentication mechanisms are not yet finalized.
-- Steam data requires validation and preprocessing before importing into MongoDB.
-- Some games lack prices, descriptions, screenshots, or release dates.
-- Real payment processing is not planned.
-- Azure infrastructure has not yet been provisioned.
-- Production database compatibility and security configuration require validation before deployment.
-- Local development currently uses one MongoDB instance; an additional test database may be configured for isolated automated tests.
+- Catalog data is imported and may be outdated; prices and release statuses are not refreshed live.
+- No live currency conversion is implemented. Missing prices remain distinct from free games.
+- User accounts, authentication, carts, payments, and administrative APIs are not implemented in this backend.
+- Validate Azure DocumentDB compatibility and production security settings when changing database features or deployment configuration.
