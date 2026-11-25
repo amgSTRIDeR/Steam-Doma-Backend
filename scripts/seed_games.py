@@ -54,20 +54,40 @@ def prepare_documents(path: Path) -> tuple[list[dict], int]:
 
 
 async def seed_games(path: Path) -> None:
-    """Seed an empty database once."""
+    """Seed an empty local or Azure database once."""
     documents, skipped = prepare_documents(path)
 
-    client = AsyncMongoClient(
-        os.environ["MONGO_URI"],
-        serverSelectionTimeoutMS=5000,
-    )
+    database_provider = os.getenv("DATABASE_PROVIDER", "local").strip().lower()
+
+    database_name = os.environ["MONGO_DB_NAME"]
+
+    if database_provider == "azure":
+        client = AsyncMongoClient(
+            os.environ["AZURE_DOCUMENTDB_URI"],
+            username=os.environ["AZURE_DOCUMENTDB_USERNAME"],
+            password=os.environ["AZURE_DOCUMENTDB_PASSWORD"],
+            serverSelectionTimeoutMS=10000,
+        )
+    elif database_provider == "local":
+        client = AsyncMongoClient(
+            os.environ["MONGO_URI"],
+            serverSelectionTimeoutMS=5000,
+        )
+    else:
+        raise ValueError(f"Unsupported database provider: {database_provider}")
 
     try:
         await client.admin.command("ping")
 
-        db = client[os.environ["MONGO_DB_NAME"]]
+        db = client[database_name]
         games = db["games"]
         history = db["seed_history"]
+
+        print(f"Database provider: {database_provider}")
+        print(f"Database name: {db.name}")
+        print(f"Dataset: {path}")
+        print(f"Prepared documents: {len(documents)}")
+        print(f"Skipped documents: {skipped}")
 
         # Never seed a database that was seeded before.
         previous_seed = await history.find_one({"_id": SEED_ID})
@@ -101,12 +121,19 @@ async def seed_games(path: Path) -> None:
 
         inserted = 0
 
+        print("Starting game import...")
+
         for offset in range(0, len(documents), BATCH_SIZE):
             batch = documents[offset : offset + BATCH_SIZE]
 
             result = await games.insert_many(batch)
 
             inserted += len(result.inserted_ids)
+
+            print(
+                f"Import progress: {inserted}/{len(documents)} ({inserted / len(documents):.1%})",
+                flush=True,
+            )
 
         result = await history.update_one(
             {"_id": SEED_ID, "status": "started"},
