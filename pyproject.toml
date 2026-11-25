@@ -13,6 +13,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "httpx>=0.28.1",
     "httpx2>=2.16.0",
     "pre-commit>=4.7.0",
     "pytest",
@@ -35,3 +36,4 @@ select = ["E4", "E7", "E9", "F", "I", "UP"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
